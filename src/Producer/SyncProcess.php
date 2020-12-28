@@ -162,9 +162,18 @@ class SyncProcess
 
             $topicMeta = $topics[$record['topic']];
             $partNums  = array_keys($topicMeta);
-            shuffle($partNums);
 
-            $partId = isset($record['partId'], $topicMeta[$record['partId']]) ? $record['partId'] : $partNums[0];
+
+            // 如果有key的话应该保证相同的key取到相同的分区以保证顺序性,不能随机取
+            if ($record['key'] && $partNums && !isset($record['partId'])) {
+                $record['partId'] = $this->strHashCode($record['key']) % count($partNums);
+            }
+            if (isset($record['partId']) && isset($topicMeta[$record['partId']])) {
+                $partId = $record['partId'];
+            } else {
+                shuffle($partNums);
+                $partId = $partNums[0];
+            }
 
             $brokerId  = $topicMeta[$partId];
             $topicData = [];
@@ -201,5 +210,27 @@ class SyncProcess
     private function getConfig(): ProducerConfig
     {
         return ProducerConfig::getInstance();
+    }
+
+    /**
+     * 获得字符串的hashCode(类似Java)
+     * @param $str
+     * @return int
+     */
+    private function strHashCode($str) {
+        $str = (string)$str;
+        $hash = 0;
+        $len = strlen($str);
+        if ($len == 0 ) {
+            return $hash;
+        }
+        for ($i = 0; $i < $len; $i++) {
+            $h = $hash << 5;
+            $h -= $hash;
+            $h += ord($str[$i]);
+            $hash = $h;
+            $hash &= 0xFFFFFFFF;
+        }
+        return $hash;
     }
 }
